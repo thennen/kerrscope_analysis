@@ -7,6 +7,7 @@ from scipy.optimize import curve_fit
 import os
 import fnmatch
 import heapq
+from os.path import join as pjoin
 
 # datadir = r'\\132.239.170.55\Tyler'
 datadir = r'C:\Users\thenn\Documents\kerrscope_data'
@@ -142,11 +143,11 @@ def load_dir(dir, filter=''):
     filter = '*' + filter + '*'
     files = [f for f in os.listdir(dir) if f.endswith('.png')]
     matches = fnmatch.filter(files, filter)
-    matches = [os.path.join(dir, fn) for fn in np.sort(matches)]
+    matches = [pjoin(dir, fn) for fn in np.sort(matches)]
     print('loading files:')
     for f in matches:
         print(f)
-    ims = [imread(os.path.join(dir, f)) for f in matches]
+    ims = [imread(pjoin(dir, f)) for f in matches]
     return ims, matches
 
 
@@ -161,9 +162,9 @@ def ipath(path, filter=''):
 
     for path, dir, files in os.walk(path):
         # get the whole path, so subdirectory may be specified in the filter
-        fpath = [os.path.join(path, fname) for fname in files]
+        fpath = [pjoin(path, fname) for fname in files]
         for f in fnmatch.filter(fpath, filter):
-            yield os.path.join(path, f)
+            yield pjoin(path, f)
 
 
 def findfile(filter='', n=1, returnall=False, ext='png'):
@@ -187,7 +188,7 @@ def findfile(filter='', n=1, returnall=False, ext='png'):
         # This just looks in datadir, not subdirectories
         #
         #fnames = fnmatch.filter(os.listdir(datadir), filter)
-        #fpaths = [os.path.join(datadir, fn) for fn in fnames]
+        #fpaths = [pjoin(datadir, fn) for fn in fnames]
         #nlargest = heapq.nlargest(n, fpaths, key=os.path.getmtime)
         if n == 1 or not returnall:
             return nlargest[-1]
@@ -200,17 +201,15 @@ def findfile(filter='', n=1, returnall=False, ext='png'):
 
 def write_ims(ims, dir, fnames, cmap='gray', **kwargs):
     ''' Write a list of ims to disk.  kwargs pass through to mpl.image.imsave'''
-    if not os.path.isdir(dir):
-        os.makedirs(dir)
+    mkdir(dir)
 
     for im, fn in zip(ims, fnames):
-        imsave(os.path.join(dir, fn), im, cmap=cmap, **kwargs)
+        imsave(pjoin(dir, fn), im, cmap=cmap, **kwargs)
 
 
 def write_ims_scaled(ims, dir, fnames, lp=1, hp=99, samerange=False, cmap='gray', **kwargs):
     ''' Write a list of ims to disk, scaling to percentile limits '''
-    if not os.path.isdir(dir):
-        os.makedirs(dir)
+    mkdir(dir)
 
     if samerange:
         alldata = np.concatenate([im[:512].flatten() for im in ims])
@@ -221,8 +220,12 @@ def write_ims_scaled(ims, dir, fnames, lp=1, hp=99, samerange=False, cmap='gray'
         if not samerange:
             vmin = np.percentile(im[:512], lp)
             vmax = np.percentile(im[:512], hp)
-        imsave(os.path.join(dir, fn), im, vmax=vmax, vmin=vmin, cmap=cmap, **kwargs)
+        imsave(pjoin(dir, fn), im, vmax=vmax, vmin=vmin, cmap=cmap, **kwargs)
 
+
+def mkdir(path):
+    if not os.path.isdir(path):
+        os.makedirs(path)
 
 ###### Read and write ######
 
@@ -233,25 +236,42 @@ def rescale_ims(dir, filter='', subdir='Rescaled', lp=1, hp=99, **kwargs):
     '''
     ims, paths = load_dir(dir, filter)
 
-    subdirpath = os.path.join(dir, subdir)
+    subdirpath = pjoin(dir, subdir)
     fnames = [os.path.split(fp)[1] for fp in paths]
     write_ims_scaled(ims, subdirpath, fnames, lp=lp, hp=hp, **kwargs)
     print('Wrote scaled images to {}'.format(subdirpath))
 
-def rescale_robs_data():
-    dirs = [dir for dir in os.listdir(robdir) if os.path.isdir(os.path.join(robdir, dir))]
+
+def rescale_everything(parentpath=robdir, filter='*[0-9].png'):
+    '''
+    Rescale all .png in 1st level subdirectories if rescaled file doesn't already exist
+    '''
+    dirs = [dir for dir in os.listdir(parentpath) if os.path.isdir(pjoin(parentpath, dir))]
     for dir in dirs:
-        im_dir = os.path.join(robdir, dir)
-        rescaled_dir = os.path.join(im_dir, 'Rescaled')
+        im_dir = pjoin(parentpath, dir)
+        rescaled_dir = pjoin(im_dir, 'Rescaled')
         if os.path.isdir(rescaled_dir):
             already_done = os.listdir(rescaled_dir)
         else:
             already_done = []
         fns = fnmatch.filter(os.listdir(im_dir), '*[0-9].png')
-        rescale_fns = [fn for fn in fns if fn not in already_done]
-        rescale_fps = [os.path.join(im_dir, fn) for fn in rescale_fns]
-        ims = [imread(os.path.join(im_dir, f)) for f in rescale_fps]
-        print('Writing to')
-        print(rescaled_dir)
+        pngs = [fn for fn in fns if fn.endswith('.png')]
+        rescale_fns = [fn for fn in pngs if fn not in already_done]
+        rescale_fps = [pjoin(im_dir, fn) for fn in rescale_fns]
+        ims = [imread(pjoin(im_dir, f)) for f in rescale_fps]
+        print('Writing {} new files to {}'.format(len(ims), rescaled_dir))
         write_ims_scaled(ims, rescaled_dir, rescale_fns)
+
+
+def rotate_ims(root, dirs, angles):
+    ''' Rotate all the images in ~/Rescaled and save to ~/Rotated '''
+    for d, a in zip(dirs, angles):
+    path = pjoin(root, d)
+    rotated_dir = pjoin(path, 'Rotated')
+    mkdir(rotated_dir)
+    rescale_dir = pjoin(path, 'Rescaled')
+    files = [f for f in os.listdir(rescale_dir) if f.endswith('png')]
+    for f in files:
+        if not os.path.isfile(pjoin(rotated_dir, f)):
+            Image.open(pjoin(rescale_dir, f)).rotate(a).save(pjoin(rotated_dir, f))
 
