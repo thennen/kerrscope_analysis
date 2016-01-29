@@ -36,7 +36,8 @@ def diff(im1, im2, bg=None, sigmas=4, thresh=None):
 
         # Do histogram of 1-99 percentile
         # binwidth = 1/512.
-        binwidth = 0.5/2**find_bitdepth(im2)
+        maxpixel = np.max(im2)
+        binwidth = maxpixel/2**find_bitdepth(im2)
         hrange = (np.percentile(delta, 1), np.percentile(delta, 99))
         hbinstart = int(hrange[0] / binwidth) * binwidth - binwidth/2
         hbins = np.arange(hbinstart, hrange[1], step=binwidth)
@@ -50,14 +51,14 @@ def diff(im1, im2, bg=None, sigmas=4, thresh=None):
         thresh = (mean - sigmas*sigma, mean + sigmas*sigma)
 
         # Do a plot to show fit result
-        #plt.figure()
-        #plt.plot(hbin, hval, '.')
-        #hbinsfull = np.arange(-0.5 - binwidth/2, 0.5 + binwidth/2, step=binwidth)
-        #hbinsavg = hbinsfull[:-1]/2 + hbinsfull[1:]/2
-        #plt.hist(delta.flatten(), bins=hbinsfull)
-        #plt.plot(hbinsavg, gaus(hbinsavg, *popt))
-        #plt.vlines((thresh[0], thresh[1]), 0, popt[0], colors='red')
-        #plt.xlim((-1, 1))
+        # plt.figure()
+        # plt.plot(hbin, hval, '.')
+        # hbinsfull = np.arange(-maxpixel - binwidth/2, maxpixel + binwidth/2, step=binwidth)
+        # hbinsavg = hbinsfull[:-1]/2 + hbinsfull[1:]/2
+        # plt.hist(delta.flatten(), bins=hbinsfull)
+        # plt.plot(hbinsavg, gaus(hbinsavg, *popt))
+        # plt.vlines((thresh[0], thresh[1]), 0, popt[0], colors='red')
+        # plt.xlim((-1, 1))
 
 
     delta[(delta > thresh[0]) & (delta < thresh[1])] = np.nan
@@ -81,7 +82,7 @@ def kerr_hist(fp, bitdepth=9):
 
 def find_bitdepth(im):
     maxv = np.max(im)
-    print('maximum pixel value: {}'.format(maxv))
+    #print('maximum pixel value: {}'.format(maxv))
     bitdiffs = np.diff((np.unique(im)))
     bitdiffs = bitdiffs[bitdiffs > 2**-12]
     minbd = min(bitdiffs)
@@ -110,13 +111,28 @@ def imshow_scaled(im, lp=1, hp=99, cmap='gray', **kwargs):
     plt.imshow(im, cmap=cmap, interpolation='none', vmin=vmin, vmax=vmax, **kwargs)
 
 
+def make_fig(shape, dpi=96.):
+    ''' return (fig, ax), without axes or white space '''
+    h, w = shape
+    dpi = float(dpi)
+    fig = plt.figure()
+    fig.set_size_inches(w/dpi, h/dpi, forward=True)
+    ax = plt.Axes(fig, [0,0,1,1])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+
+    return fig, ax
+
+
 def imshow_diff(im1, im2, bg=None, sigmas=4, thresh=None, cmap='seismic_r', alpha=.4, **kwargs):
     ''' Show image with differences above the noise highlighted '''
 
+    fig, ax = make_fig(np.shape(im2))
+    imshow_scaled(im2, lp=1, hp=99)
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
     delta = diff(im1, im2, bg, sigmas, thresh)
 
-    plt.figure()
-    imshow_scaled(im2, lp=1, hp=2)
     vmin = np.percentile(delta[~np.isnan(delta)], 1)
     vmax = np.percentile(delta[~np.isnan(delta)], 99)
     # Use range symmetric around zero
@@ -124,6 +140,10 @@ def imshow_diff(im1, im2, bg=None, sigmas=4, thresh=None, cmap='seismic_r', alph
     vmin = -vmax
 
     plt.imshow(delta, cmap=cmap, interpolation='none', alpha=alpha, vmin=vmin, vmax=vmax, **kwargs)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+
+    return fig, ax
 
 
 ###### Import data #####
@@ -229,6 +249,7 @@ def mkdir(path):
 
 ###### Read and write ######
 
+
 def rescale_ims(dir, filter='', subdir='Rescaled', lp=1, hp=99, **kwargs):
     '''
     Read .png files from disk, rescale them to percentile limits, and write
@@ -266,12 +287,12 @@ def rescale_everything(parentpath=robdir, filter='*[0-9].png'):
 def rotate_ims(root, dirs, angles):
     ''' Rotate all the images in ~/Rescaled and save to ~/Rotated '''
     for d, a in zip(dirs, angles):
-    path = pjoin(root, d)
-    rotated_dir = pjoin(path, 'Rotated')
-    mkdir(rotated_dir)
-    rescale_dir = pjoin(path, 'Rescaled')
-    files = [f for f in os.listdir(rescale_dir) if f.endswith('png')]
-    for f in files:
-        if not os.path.isfile(pjoin(rotated_dir, f)):
-            Image.open(pjoin(rescale_dir, f)).rotate(a).save(pjoin(rotated_dir, f))
+        path = pjoin(root, d)
+        rotated_dir = pjoin(path, 'Rotated')
+        mkdir(rotated_dir)
+        rescale_dir = pjoin(path, 'Rescaled')
+        files = [f for f in os.listdir(rescale_dir) if f.endswith('png')]
+        for f in files:
+            if not os.path.isfile(pjoin(rotated_dir, f)):
+                Image.open(pjoin(rescale_dir, f)).rotate(a).save(pjoin(rotated_dir, f))
 
