@@ -30,6 +30,7 @@ plt.show()
 di = i1 - i0
 dj = j1 - j0
 ii, jj = np.mgrid[:di, :dj]
+
 def circle(centeri, centerj, radius, hlevel=1, llevel=0):
     '''Generate array for a circle '''
     circ = hlevel * np.ones((di, dj))
