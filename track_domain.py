@@ -74,13 +74,14 @@ for subim, fn in zip(subims, imfns):
     bubble = max(contours, key=len)
     bubblex = bubble[:, 1]
     bubbley = bubble[:, 0]
+
     x1.append(min(bubblex))
     x2.append(max(bubblex))
     y1.append(min(bubbley))
     y2.append(max(bubbley))
     ax.plot(bubblex, bubbley, linewidth=2, c='Lime')
-    ax.hlines((x1[-1], x2[-1]), y1[-1], y2[-1])
-    ax.vlines((y1[-1], y2[-1]), x1[-1], x2[-1])
+    ax.hlines((y1[-1], y2[-1]), 0, dj, linestyles='dashed')
+    ax.vlines((x1[-1], x2[-1]), 0, di, linestyles='dashed')
     fig.savefig(os.path.join(contour_dir, fn))
     plt.close(fig)
     plt.ion()
