@@ -9,17 +9,27 @@ import matplotlib.pyplot as plt
 from matplotlib.image import imread
 from skimage.measure import find_contours
 from skimage.filters import gaussian_filter
+from skimage import exposure
 
 #imdir = r"Tolley DMI PtCoIrPt\Ir 2A\1"
 imdir= r'C:\Users\thenn\Desktop\bubbles\Tolley DMI PtCoIrPt\Ir 4A\15'
+
+# Make new directory to store result of analysis
 contour_dir = os.path.join(imdir, 'contours')
 if not os.path.isdir(contour_dir):
     os.mkdir(contour_dir)
-#imdir = r"C:\Users\thenn\Desktop\bubbles\Tolley DMI PtCoIrPt\Ir 4A\13"
+
+# Find files to analyze
 imfns= [fn for fn in os.listdir(imdir) if fn.endswith('.png')]
 impaths = [os.path.join(imdir, fn) for fn in imfns]
 ims = [imread(fp) for fp in impaths]
 imnums = [p.split('_')[-1][:-4] for p in impaths]
+
+# Do contrast stretching for all ims
+def stretch(image):
+    p2, p98 = np.percentile(im, (2, 98))
+    return exposure.rescale_intensity(im, in_range=(p2, p98))
+ims = [stretch(im[:512]) for im in ims]
 
 # Whoever wrote kerr program is a goddamn idiot
 def fix_shit(astring):
@@ -75,13 +85,14 @@ for subim, fn in zip(subims, imfns):
     bubble = max(contours, key=len)
     bubblex = bubble[:, 1]
     bubbley = bubble[:, 0]
+
     x1.append(min(bubblex))
     x2.append(max(bubblex))
     y1.append(min(bubbley))
     y2.append(max(bubbley))
     ax.plot(bubblex, bubbley, linewidth=2, c='Lime')
-    ax.hlines((x1[-1], x2[-1]), y1[-1], y2[-1])
-    ax.vlines((y1[-1], y2[-1]), x1[-1], x2[-1])
+    ax.hlines((y1[-1], y2[-1]), 0, dj, linestyles='dashed')
+    ax.vlines((x1[-1], x2[-1]), 0, di, linestyles='dashed')
     fig.savefig(os.path.join(contour_dir, fn))
     plt.close(fig)
     plt.ion()
