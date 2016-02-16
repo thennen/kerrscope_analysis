@@ -10,7 +10,8 @@ from matplotlib.image import imread
 from skimage.measure import find_contours
 from skimage.filters import gaussian_filter
 
-imdir = r"Tolley DMI PtCoIrPt\Ir 2A\1"
+#imdir = r"Tolley DMI PtCoIrPt\Ir 2A\1"
+imdir= r'C:\Users\thenn\Desktop\bubbles\Tolley DMI PtCoIrPt\Ir 4A\15'
 contour_dir = os.path.join(imdir, 'contours')
 if not os.path.isdir(contour_dir):
     os.mkdir(contour_dir)
