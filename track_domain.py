@@ -9,16 +9,26 @@ import matplotlib.pyplot as plt
 from matplotlib.image import imread
 from skimage.measure import find_contours
 from skimage.filters import gaussian_filter
+from skimage import exposure
 
 imdir = r"Tolley DMI PtCoIrPt\Ir 2A\1"
+
+# Make new directory to store result of analysis
 contour_dir = os.path.join(imdir, 'contours')
 if not os.path.isdir(contour_dir):
     os.mkdir(contour_dir)
-#imdir = r"C:\Users\thenn\Desktop\bubbles\Tolley DMI PtCoIrPt\Ir 4A\13"
+
+# Find files to analyze
 imfns= [fn for fn in os.listdir(imdir) if fn.endswith('.png')]
 impaths = [os.path.join(imdir, fn) for fn in imfns]
 ims = [imread(fp) for fp in impaths]
 imnums = [p.split('_')[-1][:-4] for p in impaths]
+
+# Do contrast stretching for all ims
+def stretch(image):
+    p2, p98 = np.percentile(im, (2, 98))
+    return exposure.rescale_intensity(im, in_range=(p2, p98))
+ims = [stretch(im[:512]) for im in ims]
 
 # Whoever wrote kerr program is a goddamn idiot
 def fix_shit(astring):
