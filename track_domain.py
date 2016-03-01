@@ -11,99 +11,103 @@ from skimage.measure import find_contours
 from skimage.filters import gaussian_filter
 from skimage import exposure
 
-#imdir = r"Tolley DMI PtCoIrPt\Ir 2A\1"
-imdir= r'C:\Users\thenn\Desktop\bubbles\Tolley DMI PtCoIrPt\Ir 4A\15'
 
-# Make new directory to store result of analysis
-contour_dir = os.path.join(imdir, 'contours')
-if not os.path.isdir(contour_dir):
-    os.mkdir(contour_dir)
+def track_domain(imdir):
+    # Make new directory to store result of analysis
+    contour_dir = os.path.join(imdir, 'contours')
+    if not os.path.isdir(contour_dir):
+        os.mkdir(contour_dir)
 
-# Find files to analyze
-imfns= [fn for fn in os.listdir(imdir) if fn.endswith('.png')]
-impaths = [os.path.join(imdir, fn) for fn in imfns]
-ims = [imread(fp) for fp in impaths]
-imnums = [p.split('_')[-1][:-4] for p in impaths]
+    # Find files to analyze
+    imfns= [fn for fn in os.listdir(imdir) if fn.endswith('.png')]
+    impaths = [os.path.join(imdir, fn) for fn in imfns]
+    ims = [imread(fp) for fp in impaths]
+    imnums = [p.split('_')[-1][:-4] for p in impaths]
 
-# Do contrast stretching for all ims
-def stretch(image):
-    p2, p98 = np.percentile(im, (2, 98))
-    return exposure.rescale_intensity(im, in_range=(p2, p98))
-ims = [stretch(im[:512]) for im in ims]
+    # Do contrast stretching for all ims
+    def stretch(image):
+        p2, p98 = np.percentile(im, (2, 98))
+        return exposure.rescale_intensity(im, in_range=(p2, p98))
+    ims = [stretch(im[:512]) for im in ims]
 
-# Whoever wrote kerr program is a goddamn idiot
-def fix_shit(astring):
-    try:
-        return int(astring)
-    except:
-        return 0
-imnums = map(fix_shit, imnums)
+    # Whoever wrote kerr program is a goddamn idiot
+    def fix_shit(astring):
+        try:
+            return int(astring)
+        except:
+            return 0
+    imnums = map(fix_shit, imnums)
 
-# Plot 10 of the images on top of eachother for area selection
-fig, ax = plt.subplots()
-step = max(1, len(ims) / 10)
-for im in ims[::step]:
-    ax.imshow(im, alpha=.1, cmap='gray')
+    # Plot 10 of the images on top of eachother for area selection
+    fig, ax = plt.subplots()
+    step = max(1, len(ims) / 10)
+    for im in ims[::step]:
+        ax.imshow(im, alpha=.1, cmap='gray')
 
-a = SelectRect(ax)
-plt.show()
-while a.x is None:
-    plt.pause(.1)
+    a = SelectRect(ax)
+    plt.show()
+    while a.x is None:
+        plt.pause(.1)
 
-# Change to matrix notation
-i0, i1 = a.y[0], a.y[1]
-j0, j1 = a.x[0], a.x[1]
-di = i1 - i0
-dj = j1 - j0
-subims = [im[i0:i1, j0:j1] for im in ims]
+    # Change to matrix notation
+    i0, i1 = a.y[0], a.y[1]
+    j0, j1 = a.x[0], a.x[1]
+    di = i1 - i0
+    dj = j1 - j0
+    subims = [im[i0:i1, j0:j1] for im in ims]
 
-x1 = []
-x2 = []
-y1 = []
-y2 = []
+    x1 = []
+    x2 = []
+    y1 = []
+    y2 = []
 
-def make_fig(shape, dpi=96.):
-    ''' return (fig, ax), without axes or white space (maybe)'''
-    h, w = shape
-    dpi = float(dpi)
-    fig = plt.figure()
-    fig.set_size_inches(w/dpi, h/dpi, forward=True)
-    ax = plt.Axes(fig, [0,0,1,1])
-    ax.set_axis_off()
-    fig.add_axes(ax)
-    return fig, ax
+    def make_fig(shape, dpi=96.):
+        ''' return (fig, ax), without axes or white space (maybe)'''
+        h, w = shape
+        dpi = float(dpi)
+        fig = plt.figure()
+        fig.set_size_inches(w/dpi, h/dpi, forward=True)
+        ax = plt.Axes(fig, [0,0,1,1])
+        ax.set_axis_off()
+        fig.add_axes(ax)
+        return fig, ax
 
 
-for subim, fn in zip(subims, imfns):
-    plt.ioff()
-    fig, ax = make_fig((di, dj))
-    ax.imshow(subim, cmap='gray', interpolation='none')
-    filt_subim = gaussian_filter(subim, (1,1))
-    level = (np.max(filt_subim) + np.min(filt_subim)) / 2
-    contours = find_contours(filt_subim, level)
+    for subim, fn in zip(subims, imfns):
+        plt.ioff()
+        fig, ax = make_fig((di, dj))
+        ax.imshow(subim, cmap='gray', interpolation='none')
+        filt_subim = gaussian_filter(subim, (1,1))
+        level = (np.max(filt_subim) + np.min(filt_subim)) / 2
+        contours = find_contours(filt_subim, level)
 
-    bubble = max(contours, key=len)
-    bubblex = bubble[:, 1]
-    bubbley = bubble[:, 0]
+        bubble = max(contours, key=len)
+        bubblex = bubble[:, 1]
+        bubbley = bubble[:, 0]
 
-    x1.append(min(bubblex))
-    x2.append(max(bubblex))
-    y1.append(min(bubbley))
-    y2.append(max(bubbley))
-    ax.plot(bubblex, bubbley, linewidth=2, c='Lime')
-    ax.hlines((y1[-1], y2[-1]), 0, dj, linestyles='dashed')
-    ax.vlines((x1[-1], x2[-1]), 0, di, linestyles='dashed')
-    fig.savefig(os.path.join(contour_dir, fn))
-    plt.close(fig)
-    plt.ion()
+        x1.append(min(bubblex))
+        x2.append(max(bubblex))
+        y1.append(min(bubbley))
+        y2.append(max(bubbley))
+        ax.plot(bubblex, bubbley, linewidth=2, c='Lime')
+        ax.hlines((y1[-1], y2[-1]), 0, dj, linestyles='dashed')
+        ax.vlines((x1[-1], x2[-1]), 0, di, linestyles='dashed')
+        fig.savefig(os.path.join(contour_dir, fn))
+        plt.close(fig)
+        plt.ion()
 
-fig2, ax2 = plt.subplots()
-ax2.plot(imnums, x1, '.-', label='xleft')
-ax2.plot(imnums, x2, '.-', label='xright')
-ax2.plot(imnums, y1, '.-', label='ytop')
-ax2.plot(imnums, y2, '.-', label='ybottom')
-ax2.set_xlabel('File Number')
-ax2.set_ylabel('Pixel location')
-plt.legend(loc=0)
+    fig2, ax2 = plt.subplots()
+    ax2.plot(imnums, x1, '.-', label='xleft')
+    ax2.plot(imnums, x2, '.-', label='xright')
+    ax2.plot(imnums, y1, '.-', label='ytop')
+    ax2.plot(imnums, y2, '.-', label='ybottom')
+    ax2.set_xlabel('File Number')
+    ax2.set_ylabel('Pixel location')
+    plt.legend(loc=0)
 
-plt.show()
+    plt.show()
+
+if __name__ == '__main__':
+    imdir = r"Tolley DMI PtCoIrPt\Ir 2A\1"
+    #imdir= r'C:\Users\thenn\Desktop\bubbles\Tolley DMI PtCoIrPt\Ir 4A\15'
+    track_domain(imdir)
