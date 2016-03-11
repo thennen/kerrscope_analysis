@@ -17,18 +17,20 @@ from skimage.measure import find_contours
 from skimage.filters import gaussian_filter
 from skimage import exposure
 from fnmatch import filter
+from os.path import join as pjoin
+from os.path import isdir
 
 
 def track_domain(imdir):
     # Make new directory to store result of analysis
-    contour_dir = os.path.join(imdir, 'contours')
-    if not os.path.isdir(contour_dir):
+    contour_dir = pjoin(imdir, 'contours')
+    if not isdir(contour_dir):
         os.mkdir(contour_dir)
 
     # Find files to analyze
     imfns = filter(os.listdir(imdir), '*[0-9][0-9][0-9].png')
-    #imfns= [fn for fn in os.listdir(imdir) if fn.endswith('.png')]
-    impaths = [os.path.join(imdir, fn) for fn in imfns]
+    # imfns= [fn for fn in os.listdir(imdir) if fn.endswith('.png')]
+    impaths = [pjoin(imdir, fn) for fn in imfns]
     ims = [imread(fp) for fp in impaths]
     imnums = [p.split('_')[-1][:-4] for p in impaths]
 
@@ -72,7 +74,7 @@ def track_domain(imdir):
     for subim, fn in zip(subims, imfns):
         fig, ax = make_fig((di, dj))
         ax.imshow(subim, cmap='gray', interpolation='none')
-        filt_subim = gaussian_filter(subim, (1,1))
+        filt_subim = gaussian_filter(subim, (1, 1))
         level = (np.max(filt_subim) + np.min(filt_subim)) / 2
         contours = find_contours(filt_subim, level)
 
@@ -89,14 +91,19 @@ def track_domain(imdir):
         ax.plot(bubblex, bubbley, linewidth=2, c='Lime')
         ax.hlines((y1[-1], y2[-1]), 0, dj, linestyles='dashed')
         ax.vlines((x1[-1], x2[-1]), 0, di, linestyles='dashed')
-        fig.savefig(os.path.join(contour_dir, fn))
+        fig.savefig(pjoin(contour_dir, fn))
         plt.close(fig)
+
+    with open(pjoin(contour_dir, 'ROI.txt'), 'w') as f:
+        f.write('{}:{}, {}:{}'.format(i0, i1, j0, j1))
     plt.ion()
     return (imnums, x1, x2, y1, y2)
+
 
 def stretch(image):
     p2, p98 = np.percentile(image, (2, 98))
     return exposure.rescale_intensity(image, in_range=(p2, p98))
+
 
 def write_plots((imnums, x1, x2, y1, y2), plotdir):
     ''' Write some plots to disk '''
@@ -120,7 +127,7 @@ def write_plots((imnums, x1, x2, y1, y2), plotdir):
     ax1.set_xlabel('File Number')
     ax1.set_ylabel('Location (pixels)')
     plt.legend(loc=0)
-    fig1.savefig(os.path.join(plotdir, 'left_right.png'))
+    fig1.savefig(pjoin(plotdir, 'left_right.png'))
     plt.close(fig1)
 
     fig2, ax2 = plt.subplots()
@@ -129,7 +136,7 @@ def write_plots((imnums, x1, x2, y1, y2), plotdir):
     ax2.set_xlabel('File Number')
     ax2.set_ylabel('Location (pixels)')
     plt.legend(loc=0)
-    fig2.savefig(os.path.join(plotdir, 'top_bottom.png'))
+    fig2.savefig(pjoin(plotdir, 'top_bottom.png'))
     plt.close(fig2)
 
     fig3, ax3 = plt.subplots()
@@ -138,7 +145,7 @@ def write_plots((imnums, x1, x2, y1, y2), plotdir):
     ax3.set_xlabel('File Number')
     ax3.set_ylabel('$\\Delta$ Location (pixels)')
     plt.legend(loc=0)
-    fig3.savefig(os.path.join(plotdir, 'diff_top_bottom.png'))
+    fig3.savefig(pjoin(plotdir, 'diff_top_bottom.png'))
     plt.close(fig3)
 
     fig4, ax4 = plt.subplots()
@@ -147,25 +154,39 @@ def write_plots((imnums, x1, x2, y1, y2), plotdir):
     ax4.set_xlabel('File Number')
     ax4.set_ylabel('$\\Delta$ Location (pixels)')
     plt.legend(loc=0)
-    fig4.savefig(os.path.join(plotdir, 'diff_left_right.png'))
+    fig4.savefig(pjoin(plotdir, 'diff_left_right.png'))
     plt.close(fig4)
 
     plt.ion()
 
+
 def write_data((imnums, x1, x2, y1, y2), datadir):
     ''' Write txt files '''
-    with open(os.path.join(datadir, 'contour_edges.txt'), 'w') as f:
+    pdir = os.path.split(datadir)[-1]
+    with open(pjoin(datadir, pdir + '_contour_edges.txt'), 'w') as f:
         f.write('image_num\tleft\tright\ttop\tbottom\n')
         fmt = ['%d', '%.2f', '%.2f', '%.2f', '%.2f']
         np.savetxt(f, zip(imnums, x1, x2, y1, y2), delimiter='\t', fmt=fmt)
 
-def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31'):
-    ''' Analyze all subdirs, writing plots and extracted data to that subdir '''
-    for folder in os.listdir(dir):
-        path = os.path.join(dir, folder)
-        dout = track_domain(path)
-        write_plots(dout, path)
-        write_data(dout, path)
+
+def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', skip=0):
+    '''
+    Analyze all subdirs, writing plots and extracted data to that subdir.
+    Also write summary to parent dir
+    '''
+    with open(pjoin(dir, 'contour_edges.txt'), 'w') as summary_file:
+        summary_file.write('image_num\tleft\tright\ttop\tbottom\n')
+        fmt = ['%d', '%.2f', '%.2f', '%.2f', '%.2f']
+        folders = [f for f in os.listdir(dir)[skip:] if isdir(pjoin(dir, f))]
+        for folder in folders:
+            path = pjoin(dir, folder)
+            dout = track_domain(path)
+            write_plots(dout, path)
+            write_data(dout, path)
+            summary_file.write('#{}\n'.format(folder))
+            np.savetxt(summary_file, zip(*dout), delimiter='\t', fmt=fmt)
+            plt.close()
+
 
 def make_fig(shape, dpi=96.):
     ''' return (fig, ax), without axes or white space (maybe)'''
@@ -173,7 +194,7 @@ def make_fig(shape, dpi=96.):
     dpi = float(dpi)
     fig = plt.figure()
     fig.set_size_inches(w/dpi, h/dpi, forward=True)
-    ax = plt.Axes(fig, [0,0,1,1])
+    ax = plt.Axes(fig, [0, 0, 1, 1])
     ax.set_axis_off()
     fig.add_axes(ax)
     return fig, ax
