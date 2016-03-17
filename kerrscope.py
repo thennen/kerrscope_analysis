@@ -8,6 +8,7 @@ import os
 import fnmatch
 import heapq
 from os.path import join as pjoin
+from matplotlib.colors import ListedColormap
 
 # datadir = r'\\132.239.170.55\Tyler'
 datadir = r'C:\Users\thenn\Documents\kerrscope_data'
@@ -94,6 +95,61 @@ def find_bitdepth(im):
 
 def diff_folder(folder, **kwargs):
     ''' highlight differences between all the images in a folder '''
+    plt.ioff()
+    diff_dir = pjoin(folder, 'hl_diffs')
+    if not os.path.isdir(diff_dir):
+        os.makedirs(diff_dir)
+    ims, fps = load_dir(folder)
+    fns = [os.path.split(fp)[-1] for fp in fps]
+    # contrast stretch everything
+    ims = [scale_image(im) for im in ims]
+    deltas = []
+    for im1, im2, fn in zip(ims[:-1], ims[1:], fns[1:]):
+        deltas.append(diff(im1, im2, **kwargs))
+        fig, ax = imshow_diff(im1, im2, **kwargs)
+        fp = pjoin(diff_dir, fn)
+        fig.savefig(fp)
+        print('wrote {}'.format(fp))
+        plt.close(fig)
+
+    # Do rainbow thing with all the diffs
+    cmap = plt.cm.hsv
+    colors = [cmap(q) for q in np.linspace(0, 1, len(deltas))]
+    fig, ax = make_fig(np.shape(ims[0]))
+    for delta, c in zip(deltas, colors):
+        cm = ListedColormap(c)
+        ax.imshow(delta, cmap=cm)
+
+    fig.savefig(pjoin(diff_dir, 'composite.png'))
+
+    plt.ion()
+
+
+
+def diff_everything(folder, **kwargs):
+    dirs = [pjoin(folder, d) for d in os.listdir(folder) if d != 'Analysis']
+    dirs = [d for d in dirs if os.path.isdir(d)]
+    for d in dirs:
+        diff_folder(d, **kwargs)
+
+    '''
+    #OTHER FUNCTION
+    dirs = [dir for dir in os.listdir(parentpath) if os.path.isdir(pjoin(parentpath, dir))]
+    for dir in dirs:
+        im_dir = pjoin(parentpath, dir)
+        rescaled_dir = pjoin(im_dir, 'Rescaled')
+        if os.path.isdir(rescaled_dir):
+            already_done = os.listdir(rescaled_dir)
+        else:
+            already_done = []
+        fns = fnmatch.filter(os.listdir(im_dir), '*[0-9].png')
+        pngs = [fn for fn in fns if fn.endswith('.png')]
+        rescale_fns = [fn for fn in pngs if fn not in already_done]
+        rescale_fps = [pjoin(im_dir, fn) for fn in rescale_fns]
+        ims = [imread(pjoin(im_dir, f)) for f in rescale_fps]
+        print('Writing {} new files to {}'.format(len(ims), rescaled_dir))
+        write_ims_scaled(ims, rescaled_dir, rescale_fns)
+        '''
 
 
 
@@ -133,11 +189,15 @@ def imshow_diff(im1, im2, bg=None, sigmas=4, thresh=None, cmap='seismic_r', alph
     ylim = ax.get_ylim()
     delta = diff(im1, im2, bg, sigmas, thresh)
 
-    vmin = np.percentile(delta[~np.isnan(delta)], 1)
-    vmax = np.percentile(delta[~np.isnan(delta)], 99)
-    # Use range symmetric around zero
-    vmax = max((abs(vmin), abs(vmax)))
-    vmin = -vmax
+    disnan = np.isnan(delta)
+    if np.any(~disnan):
+        vmin = np.percentile(delta[~disnan], 1)
+        vmax = np.percentile(delta[~disnan], 99)
+        # Use range symmetric around zero
+        vmax = max((abs(vmin), abs(vmax)))
+        vmin = -vmax
+    else:
+        vmin = vmax = None
 
     plt.imshow(delta, cmap=cmap, interpolation='none', alpha=alpha, vmin=vmin, vmax=vmax, **kwargs)
     ax.set_xlim(xlim)
@@ -159,7 +219,7 @@ def load_files(filter):
     return ims, matches
 
 
-def load_dir(dir, filter=''):
+def load_dir(dir, filter='[0-9][0-9][0-9].png'):
     filter = '*' + filter + '*'
     files = [f for f in os.listdir(dir) if f.endswith('.png')]
     matches = fnmatch.filter(files, filter)
