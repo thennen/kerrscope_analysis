@@ -3,9 +3,12 @@ Track the location of a domain
 
 TODO:
 Trim white space from saved contour plots
-Save ROI info so it can be reused
 use different ROI shapes
 Could add tracking for multiple domains, and average them
+Parse log files for meta data
+find all ROIs before analysis
+skip some number of files (that don't have domains)
+return some data structure in addition to writing files
 '''
 
 from select_rect import SelectRect
@@ -46,13 +49,13 @@ def track_domain(imdir, repeat_ROI=False):
             return 0
     imnums = map(fix_shit, imnums)
 
-    # Plot 10 of the images on top of eachother for area selection
+    # Plot 10 of the images on top of each other for area selection
     print('Plotting from {}'.format(imdir))
     fig, ax = make_fig(np.shape(ims[0]))
     step = max(1, len(ims) / 10)
     for im in ims[::step]:
-        ax.imshow(im, alpha=.1, cmap='gray')
-    ax.imshow(ims[-1], alpha=.1, cmap='gray')
+        ax.imshow(im, alpha=.1, cmap='gray', interpolation='none')
+    ax.imshow(ims[-1], alpha=.1, cmap='gray', interpolation='none')
 
     if repeat_ROI:
         roi = pjoin(contour_dir, 'ROI.txt')
@@ -125,8 +128,8 @@ def track_domain(imdir, repeat_ROI=False):
         ax.plot(bub[:, 1], bub[:, 0], linewidth=1.5, c=c)
     fig.savefig(pjoin(contour_dir, 'all_contours.png'), pad_inches='tight')
 
-    # Add last image
-    ax.imshow(subims[-1], cmap='gray')
+    # Add last subim
+    ax.imshow(subims[-1], cmap='gray', interpolation='none')
     fontdict = {'size':8}
     mpvalue = np.mean(subims[-1][-15:, -50:])
     if mpvalue > .5:
@@ -136,7 +139,7 @@ def track_domain(imdir, repeat_ROI=False):
     ax.text(dj - 55, di - 3, 'T Hennen', fontdict=fontdict)
     fig.savefig(pjoin(contour_dir, 'all_contours2.png'), pad_inches='tight')
 
-    plt.close(fig)
+    #plt.close(fig)
 
     plt.ion()
     return (imnums, x1, x2, y1, y2)
@@ -158,6 +161,19 @@ def write_plots((imnums, x1, x2, y1, y2), plotdir):
     top = abs(y1 - y1[0])
     bottom = abs(y2 - y2[0])
 
+    leftfit = np.polyfit(imnums, left, 1)
+    rightfit = np.polyfit(imnums, right, 1)
+    #topfit = np.polyfit(imnums, top, 1)
+    #bottomfit = np.polyfit(imnums, bottom, 1)
+
+    leftpolyval = np.polyval(leftfit, imnums)
+    rightpolyval = np.polyval(rightfit, imnums)
+    #toppolyval = np.polyval(topfit, imnums)
+    #bottompolyval = np.polyval(bottomfit, imnums)
+
+    leftfitlabel = '{:2f}'.format(leftfit[0])
+    rightfitlabel = '{:2f}'.format(rightfit[0])
+
     diffleft = np.diff(left)
     diffright = np.diff(right)
     difftop = np.diff(top)
@@ -165,7 +181,9 @@ def write_plots((imnums, x1, x2, y1, y2), plotdir):
 
     fig1, ax1 = plt.subplots()
     ax1.plot(imnums, left, '.-', label='Left', c='SlateBlue', linewidth=2)
+    ax1.plot(imnums, leftpolyval, '--', label=leftfitlabel, c='SlateBlue', alpha=.4)
     ax1.plot(imnums, right, '.-', label='Right', c='Crimson', linewidth=2)
+    ax1.plot(imnums, rightpolyval, '--', label=rightfitlabel, c='Crimson', alpha=.4)
     ax1.set_xlabel('File Number')
     ax1.set_ylabel('Location (pixels)')
     plt.legend(loc=0)
@@ -211,24 +229,40 @@ def write_data((imnums, x1, x2, y1, y2), datadir):
         np.savetxt(f, zip(imnums, x1, x2, y1, y2), delimiter='\t', fmt=fmt)
 
 
-def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', skip=0, **kwargs):
+def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=1, skip=0, **kwargs):
     '''
-    Analyze all subdirs, writing plots and extracted data to that subdir.
-    Also write summary to parent dir
+    Analyze all subdirs (subdir level input), writing plots and extracted data
+    to that subdir.  Also write summary to parent dir
     '''
+    data = []
     analysis_dir = pjoin(dir, 'Analysis')
     if not os.path.isdir(analysis_dir):
         os.makedirs(analysis_dir)
     with open(pjoin(analysis_dir, 'contour_edges.txt'), 'w') as summary_file:
         summary_file.write('image_num\tleft\tright\ttop\tbottom\n')
         fmt = ['%d', '%.2f', '%.2f', '%.2f', '%.2f']
-        folders = [f for f in os.listdir(dir)[skip:] if isdir(pjoin(dir, f))]
+        # This just finds first level subdirectories
+        first = [pjoin(dir, f) for f in os.listdir(dir)[skip:] if isdir(pjoin(dir, f))]
+        second = []
+        for f in first:
+            maybedirs = [pjoin(dir, f, x) for x in os.listdir(pjoin(dir, f))]
+            for md in maybedirs:
+                if isdir(md):
+                    second.append(md)
+
+        if level == 1:
+            folders = first
+        elif level == 2:
+            folders = second
+        else:
+            folders = [dir]
+
         for folder in folders:
             if folder != 'Analysis':
-                path = pjoin(dir, folder)
-                dout = track_domain(path, **kwargs)
-                write_plots(dout, path)
-                write_data(dout, path)
+                dout = track_domain(folder, **kwargs)
+                data.append(dout)
+                write_plots(dout, folder)
+                write_data(dout, folder)
                 # When done, collect some images and data into analysis directory
                 summary_file.write('#{}\n'.format(folder))
                 np.savetxt(summary_file, zip(*dout), delimiter='\t', fmt=fmt)
@@ -236,14 +270,18 @@ def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', skip=0, **kwargs
                 copyfile(allcontours, pjoin(analysis_dir, folder+'_contours.png'))
                 plt.close()
 
+    return {f:d for f,d in zip(folders, data)}
 
-def make_fig(shape, dpi=96.):
+
+def make_fig(shape):
     ''' return (fig, ax), without axes or white space (maybe)'''
+    # For some reason this totally fails if you let the figure be shown before
+    # savefig
     h, w = shape
-    dpi = float(dpi)
-    fig = plt.figure()
-    fig.set_size_inches(w/dpi, h/dpi, forward=True)
-    ax = plt.Axes(fig, [0, 0, 1, 1])
+    dpi = 100.
+    fig = plt.figure(frameon=False, dpi=dpi)
+    fig.set_size_inches(w/dpi, h/dpi)
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
     ax.set_axis_off()
     fig.add_axes(ax)
     return fig, ax
