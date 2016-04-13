@@ -16,6 +16,12 @@ for dtable in data.values():
     leftslopes.append(leftslope)
     rightslopes.append(rightslope)
 
+def parse_idiot(idiot):
+    parts = idiot.split('_')
+    return float(parts[0].replace('point', '.') + 'E-4')
+duration = [parse_idiot(psplit(psplit(p)[0])[1]) for p in data.keys()]
+volts = [os.path.split(p)[-1].split('_')[0] for p in data.keys()]
+
 duration = array(duration)
 volts = array(volts)
 leftslopes = array(leftslopes)

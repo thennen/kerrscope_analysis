@@ -7,8 +7,8 @@ use different ROI shapes
 Could add tracking for multiple domains, and average them
 Parse log files for meta data
 find all ROIs before analysis
-skip some number of files (that don't have domains)
 return some data structure in addition to writing files
+import data from txt without running analysis again
 '''
 
 from select_rect import SelectRect
@@ -21,11 +21,12 @@ from skimage.filters import gaussian_filter
 from skimage import exposure
 from fnmatch import filter
 from os.path import join as pjoin
+from os.path import split as psplit
 from os.path import isdir
 from shutil import copyfile
 
 
-def track_domain(imdir, repeat_ROI=False):
+def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
     # Make new directory to store result of analysis
     contour_dir = pjoin(imdir, 'contours')
     if not isdir(contour_dir):
@@ -42,6 +43,7 @@ def track_domain(imdir, repeat_ROI=False):
     ims = [stretch(im[:512]) for im in ims]
 
     # Whoever wrote kerr program is a goddamn idiot
+    # Actually he's a pretty alright guy.
     def fix_shit(astring):
         try:
             return int(astring)
@@ -49,15 +51,8 @@ def track_domain(imdir, repeat_ROI=False):
             return 0
     imnums = map(fix_shit, imnums)
 
-    # Plot 10 of the images on top of each other for area selection
-    print('Plotting from {}'.format(imdir))
-    fig, ax = make_fig(np.shape(ims[0]))
-    step = max(1, len(ims) / 10)
-    for im in ims[::step]:
-        ax.imshow(im, alpha=.1, cmap='gray', interpolation='none')
-    ax.imshow(ims[-1], alpha=.1, cmap='gray', interpolation='none')
-
     if repeat_ROI:
+        print('Repeat ROI from {}'.format(imdir))
         roi = pjoin(contour_dir, 'ROI.txt')
         if os.path.isfile(roi):
             with open(roi, 'r') as f:
@@ -69,10 +64,18 @@ def track_domain(imdir, repeat_ROI=False):
             repeat_ROI = False
 
     if not repeat_ROI:
+        # Plot 10 of the images on top of each other for area selection
+        print('Plotting from {}'.format(imdir))
+        fig, ax = make_fig(np.shape(ims[0]))
+        step = max(1, len(ims) / 10)
+        for im in ims[::step]:
+            ax.imshow(im, alpha=.1, cmap='gray', interpolation='none')
+        ax.imshow(ims[-1], alpha=.1, cmap='gray', interpolation='none')
         a = SelectRect(ax)
         plt.show()
         while a.x is None:
             plt.pause(.1)
+        fig.savefig(pjoin(contour_dir, 'overlap.png'), pad_inches='tight')
 
         # Change to matrix notation
         i0, i1 = a.y[0], a.y[1]
@@ -82,7 +85,6 @@ def track_domain(imdir, repeat_ROI=False):
     dj = j1 - j0
     subims = [im[i0:i1, j0:j1] for im in ims]
 
-    fig.savefig(pjoin(contour_dir, 'overlap.png'), pad_inches='tight')
 
     x1 = []
     x2 = []
@@ -90,11 +92,14 @@ def track_domain(imdir, repeat_ROI=False):
     y2 = []
 
     plt.ioff()
+    subims = subims[skipfiles:]
+    imfns = imfns[skipfiles:]
+    imnums = imnums[skipfiles:]
     bubbles = []
     for subim, fn in zip(subims, imfns):
         fig, ax = make_fig((di, dj))
         ax.imshow(subim, cmap='gray', interpolation='none')
-        filt_subim = gaussian_filter(subim, (1, 1))
+        filt_subim = gaussian_filter(subim, (sigma, sigma))
         level = (np.max(filt_subim) + np.min(filt_subim)) / 2
         contours = find_contours(filt_subim, level)
 
@@ -257,18 +262,22 @@ def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=1, skip=0,
         else:
             folders = [dir]
 
+        # Remove analysis dir
+        ignoredirs = ['Analysis']
+        folders = [f for f in folders if psplit(f)[-1] not in ignoredirs]
+
+
         for folder in folders:
-            if folder != 'Analysis':
-                dout = track_domain(folder, **kwargs)
-                data.append(dout)
-                write_plots(dout, folder)
-                write_data(dout, folder)
-                # When done, collect some images and data into analysis directory
-                summary_file.write('#{}\n'.format(folder))
-                np.savetxt(summary_file, zip(*dout), delimiter='\t', fmt=fmt)
-                allcontours = pjoin(dir, folder, 'contours', 'all_contours2.png')
-                copyfile(allcontours, pjoin(analysis_dir, folder+'_contours.png'))
-                plt.close()
+            dout = track_domain(folder, **kwargs)
+            data.append(dout)
+            write_plots(dout, folder)
+            write_data(dout, folder)
+            # When done, collect some images and data into analysis directory
+            summary_file.write('#{}\n'.format(folder))
+            np.savetxt(summary_file, zip(*dout), delimiter='\t', fmt=fmt)
+            allcontours = pjoin(dir, folder, 'contours', 'all_contours2.png')
+            copyfile(allcontours, pjoin(analysis_dir, folder+'_contours.png'))
+            plt.close()
 
     return {f:d for f,d in zip(folders, data)}
 
