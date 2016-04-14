@@ -76,16 +76,3 @@ orderplot(folderfield[Amask], leftslopes[Amask], '.-', label='leftslope A')
 plt.legend(loc=0)
 plt.ylabel('Slope (Pixels/pulse)')
 plt.xlabel('IP Field (mT)')
-
-#again with meanfield
-plt.figure()
-#plt.scatter(meanfields, leftslopes, label='leftslope')
-#plt.scatter(meanfields, rightslopes, label='rightslope')
-orderplot(meanfields[Bmask], rightslopes[Bmask], '.-', label='rightslope B')
-orderplot(meanfields[Amask], rightslopes[Amask], '.-', label='rightslope A')
-orderplot(meanfields[Bmask], leftslopes[Bmask], '.-', label='leftslope B')
-orderplot(meanfields[Amask], leftslopes[Amask], '.-', label='leftslope A')
-
-plt.legend(loc=0)
-plt.ylabel('Slope (Pixels/pulse)')
-plt.xlabel('IP Field (mT)')

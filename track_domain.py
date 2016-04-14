@@ -9,6 +9,7 @@ Parse log files for meta data
 find all ROIs before analysis
 return some data structure in addition to writing files
 import data from txt without running analysis again
+collect more graphs in Analysis directory
 '''
 
 from select_rect import SelectRect
@@ -34,6 +35,9 @@ def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
 
     # Find files to analyze
     imfns = filter(os.listdir(imdir), '*[0-9][0-9][0-9].png')
+    if len(imfns) == 0:
+        # found nothingin directory, return something that doesn't break it
+        return(([np.nan], [np.nan], [np.nan], [np.nan], [np.nan]))
     # imfns= [fn for fn in os.listdir(imdir) if fn.endswith('.png')]
     impaths = [pjoin(imdir, fn) for fn in imfns]
     ims = [imread(fp) for fp in impaths]
@@ -266,7 +270,6 @@ def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=1, skip=0,
         ignoredirs = ['Analysis']
         folders = [f for f in folders if psplit(f)[-1] not in ignoredirs]
 
-
         for folder in folders:
             dout = track_domain(folder, **kwargs)
             data.append(dout)
@@ -275,8 +278,18 @@ def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=1, skip=0,
             # When done, collect some images and data into analysis directory
             summary_file.write('#{}\n'.format(folder))
             np.savetxt(summary_file, zip(*dout), delimiter='\t', fmt=fmt)
-            allcontours = pjoin(dir, folder, 'contours', 'all_contours2.png')
-            copyfile(allcontours, pjoin(analysis_dir, folder+'_contours.png'))
+            # Copy contour overlap pngs into Analysis directory
+            allcontours = pjoin(folder, 'contours', 'all_contours2.png')
+            contourdir = pjoin(analysis_dir, 'Contours')
+            if not isdir(contourdir):
+                os.makedirs(contourdir)
+            copyfile(allcontours, pjoin(contourdir, psplit(folder)[-1]+'_contours.png'))
+            # Copy slope graphs
+            allcontours = pjoin(folder, 'left_right.png')
+            lrslopedir = pjoin(analysis_dir, 'LR_Slopes')
+            if not isdir(lrslopedir):
+                os.makedirs(lrslopedir)
+            copyfile(allcontours, pjoin(lrslopedir, psplit(folder)[-1]+'_LRslope.png'))
             plt.close()
 
     return {f:d for f,d in zip(folders, data)}
