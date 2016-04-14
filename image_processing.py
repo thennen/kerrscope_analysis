@@ -1,4 +1,8 @@
-''' Some data analysis functions for kerr microscope images '''
+''' Some data analysis functions for kerr microscope images
+- highlight differences between two images
+- rescale images for contrast
+'''
+
 from matplotlib.image import imread
 from matplotlib.image import imsave
 import numpy as np
