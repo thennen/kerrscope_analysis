@@ -2,11 +2,9 @@
 Track the location of a domain
 
 TODO:
-Trim white space from saved contour plots
 use different ROI shapes
 Could add tracking for multiple domains, and average them
 Parse log files for meta data
-find all ROIs before analysis
 import data from txt without running analysis again
 collect more graphs in Analysis directory
 prevent overwriting when collecting images into Analysis directory
@@ -34,7 +32,8 @@ def kerrims(imdir):
 
 
 def kerrfolders(dir, sublevel=None, skipdone=False):
-    ''' Return paths of folders containing kerr images. Can specify subdir level '''
+    ''' Return paths of folders containing kerr images. Can specify subdir level
+    '''
     assert isdir(dir)
 
     # This function defines a legit directory
@@ -180,8 +179,10 @@ def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
     imnums = imnums[skipfiles:]
     bubbles = []
     for subim, fn in zip(subims, imfns):
+        # For some reason you must plot contours before imshow for correct png
+        # output??
         fig, ax = make_fig((di, dj))
-        ax.imshow(subim, cmap='gray', interpolation='none')
+        ax.invert_yaxis()
         filt_subim = gaussian_filter(subim, (sigma, sigma))
         level = (np.max(filt_subim) + np.min(filt_subim)) / 2
         contours = find_contours(filt_subim, level)
@@ -201,6 +202,8 @@ def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
         ax.plot(bubblex, bubbley, linewidth=2, c='Lime')
         ax.hlines((y1[-1], y2[-1]), 0, dj, linestyles='dashed')
         ax.vlines((x1[-1], x2[-1]), 0, di, linestyles='dashed')
+
+        ax.imshow(subim, cmap='gray', interpolation='none')
         fig.savefig(pjoin(contour_dir, fn), pad_inches='tight')
         plt.close(fig)
 
@@ -219,6 +222,7 @@ def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
     # Add last subim
     ax.imshow(subims[-1], cmap='gray', interpolation='none')
     fontdict = {'size':8}
+    # Add watermark.  Pick whether it's white or black
     mpvalue = np.mean(subims[-1][-15:, -50:])
     if mpvalue > .5:
         fontdict['color'] = 'black'
@@ -356,6 +360,13 @@ def track_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=None, skip=0
             plt.close()
 
     return {f:d for f,d in zip(folders, data)}
+
+
+def import_data(fp):
+    ''' Get results of analysis from file '''
+    assert os.path.isfile(fp)
+
+
 
 
 def make_fig(shape):
