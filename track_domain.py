@@ -39,12 +39,12 @@ def kerrfolders(dir, sublevel=None, skipdone=False):
 
     # This function defines a legit directory
     def kerrfilt(dirpath):
-        ignoredirs = ['Analysis', 'contours']
+        ignoredirs = ['Analysis']
         if psplit(dirpath)[-1] in ignoredirs:
             return False
         if fnmatch.fnmatch(dirpath, '*\Analysis\*'):
             return False
-        if skipdone and os.path.isfile(pjoin(dirpath, 'contours', 'ROI.txt')):
+        if skipdone and os.path.isfile(pjoin(dirpath, 'Analysis', 'ROI.txt')):
             return False
         if len(kerrims(dirpath)) > 0:
             return True
@@ -65,15 +65,49 @@ def kerrfolders(dir, sublevel=None, skipdone=False):
     return folders
 
 
-def set_ROI(dir, overwrite=False):
+def set_ROI(dir, skipdone=True):
     # Look for kerr data recursively, select ROI, write it to a file
-    pass
+    folders = kerrfolders(dir, skipdone=skipdone)
+
+    for imdir in folders:
+        contour_dir = pjoin(imdir, 'Analysis')
+        # Make new directory to store ROI.txt and image
+        if not isdir(contour_dir):
+            os.mkdir(contour_dir)
+        # Find files to analyze
+        imfns = kerrims(imdir)
+        impaths = [pjoin(imdir, fn) for fn in imfns]
+        ims = [imread(fp) for fp in impaths]
+
+        # Do contrast stretching for all ims
+        ims = [stretch(im[:512]) for im in ims]
+
+        # Plot <=10 of the images on top of each other for area selection
+        print('Select ROI for {}'.format(imdir))
+        fig, ax = make_fig(np.shape(ims[0]))
+        step = max(1, len(ims) / 10)
+        for im in ims[::step]:
+            ax.imshow(im, alpha=.1, cmap='gray', interpolation='none')
+        ax.imshow(ims[-1], alpha=.1, cmap='gray', interpolation='none')
+        a = SelectRect(ax)
+        plt.show()
+        while a.x is None:
+            plt.pause(.1)
+        fig.savefig(pjoin(contour_dir, 'overlap.png'), pad_inches='tight')
+        plt.close(fig)
+
+        # Change to matrix notation
+        i0, i1 = a.y[0], a.y[1]
+        j0, j1 = a.x[0], a.x[1]
+
+        with open(pjoin(contour_dir, 'ROI.txt'), 'w') as f:
+            f.write('{}:{}, {}:{}'.format(i0, i1, j0, j1))
 
 def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
     ''' Try to find contour of domains in imdir.  Write images '''
     assert isdir(imdir)
     # Make new directory to store result of analysis
-    contour_dir = pjoin(imdir, 'contours')
+    contour_dir = pjoin(imdir, 'Analysis')
     if not isdir(contour_dir):
         os.mkdir(contour_dir)
 
@@ -308,7 +342,7 @@ def track_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=None, skip=0
             summary_file.write('#{}\n'.format(folder))
             np.savetxt(summary_file, zip(*dout), delimiter='\t', fmt=fmt)
             # Copy contour overlap pngs into Analysis directory
-            allcontours = pjoin(folder, 'contours', 'all_contours2.png')
+            allcontours = pjoin(folder, 'Analysis', 'all_contours2.png')
             contourdir = pjoin(analysis_dir, 'Contours')
             if not isdir(contourdir):
                 os.makedirs(contourdir)
