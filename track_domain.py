@@ -7,9 +7,9 @@ use different ROI shapes
 Could add tracking for multiple domains, and average them
 Parse log files for meta data
 find all ROIs before analysis
-return some data structure in addition to writing files
 import data from txt without running analysis again
 collect more graphs in Analysis directory
+prevent overwriting when collecting images into Analysis directory
 '''
 
 from select_rect import SelectRect
@@ -20,7 +20,7 @@ from matplotlib.image import imread
 from skimage.measure import find_contours
 from skimage.filters import gaussian_filter
 from skimage import exposure
-from fnmatch import filter
+import fnmatch
 from os.path import join as pjoin
 from os.path import split as psplit
 from os.path import isdir
@@ -29,9 +29,49 @@ from shutil import copyfile
 
 def kerrims(imdir):
     # Return filenames of kerr images in directory
-    return filter(os.listdir(imdir), '*[0-9][0-9][0-9].png')
+    assert isdir(imdir)
+    return fnmatch.filter(os.listdir(imdir), '*[0-9][0-9][0-9].png')
+
+
+def kerrfolders(dir, sublevel=None, skipdone=False):
+    ''' Return paths of folders containing kerr images. Can specify subdir level '''
+    assert isdir(dir)
+
+    # This function defines a legit directory
+    def kerrfilt(dirpath):
+        ignoredirs = ['Analysis', 'contours']
+        if psplit(dirpath)[-1] in ignoredirs:
+            return False
+        if fnmatch.fnmatch(dirpath, '*\Analysis\*'):
+            return False
+        if skipdone and os.path.isfile(pjoin(dirpath, 'contours', 'ROI.txt')):
+            return False
+        if len(kerrims(dirpath)) > 0:
+            return True
+
+    # Find all image dirs recursively
+    folders = []
+    dseps = dir.count(os.path.sep)
+    for dirpath, dirnames, filenames in os.walk(dir):
+        if sublevel is None:
+            if kerrfilt(dirpath):
+                folders.append(dirpath)
+        elif dirpath.count(os.path.sep) - dseps == sublevel:
+            if kerrfilt(dirpath):
+                folders.append(dirpath)
+            # This stops recursion into deeper directories
+            del dirnames[:]
+
+    return folders
+
+
+def set_ROI(dir, overwrite=False):
+    # Look for kerr data recursively, select ROI, write it to a file
+    pass
 
 def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
+    ''' Try to find contour of domains in imdir.  Write images '''
+    assert isdir(imdir)
     # Make new directory to store result of analysis
     contour_dir = pjoin(imdir, 'contours')
     if not isdir(contour_dir):
@@ -243,11 +283,12 @@ def write_data((imnums, x1, x2, y1, y2), datadir):
         np.savetxt(f, zip(imnums, x1, x2, y1, y2), delimiter='\t', fmt=fmt)
 
 
-def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=None, skip=0, skipdone=False, **kwargs):
+def track_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=None, skip=0, skipdone=False, **kwargs):
     '''
     Analyze all subdirs (subdir level input), writing plots and extracted data
     to that subdir.  Also write summary to parent dir
     '''
+    assert isdir(dir)
     data = []
     analysis_dir = pjoin(dir, 'Analysis')
     if not isdir(analysis_dir):
@@ -255,43 +296,8 @@ def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=None, skip
     with open(pjoin(analysis_dir, 'contour_edges.txt'), 'w') as summary_file:
         summary_file.write('image_num\tleft\tright\ttop\tbottom\n')
         fmt = ['%d', '%.2f', '%.2f', '%.2f', '%.2f']
-        # This just finds first level subdirectories
-        first = [pjoin(dir, f) for f in os.listdir(dir)[skip:] if isdir(pjoin(dir, f))]
-        second = []
-        for f in first:
-            maybedirs = [pjoin(dir, f, x) for x in os.listdir(pjoin(dir, f))]
-            for md in maybedirs:
-                if isdir(md):
-                    second.append(md)
 
-        if level is None:
-            # Find all image dirs recursively
-            folders = []
-            for path, fold, fil in os.walk(dir):
-                if len(kerrims(path)) > 0:
-                    folders.append(path)
-        elif level == 0:
-            folders = [dir]
-        elif level == 1:
-            folders = first
-        elif level == 2:
-            folders = second
-        else:
-            return
-
-        # Remove analysis dirs
-        ignoredirs = ['Analysis', 'contours']
-        folders = [f for f in folders if psplit(f)[-1] not in ignoredirs]
-        # Don't look anywhere inside analysis dir either
-        remfolders = filter(folders, '*\Analysis\*')
-        folders = [f for f in folders if f not in remfolders]
-
-        if skipdone:
-            # Skip folders that already have ROI.txt
-            folders = [f for f in folders if not os.path.isfile(pjoin(f, 'contours', 'ROI.txt'))]
-
-        # Don't look in folders that don't have kerr images
-        folders = [f for f in folders if len(kerrims(f)) > 0]
+        folders = kerrfolders(dir, sublevel=level, skipdone=skipdone)
 
         for folder in folders:
             dout = track_domain(folder, **kwargs)
