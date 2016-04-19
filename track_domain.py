@@ -27,6 +27,10 @@ from os.path import isdir
 from shutil import copyfile
 
 
+def kerrims(imdir):
+    # Return filenames of kerr images in directory
+    return filter(os.listdir(imdir), '*[0-9][0-9][0-9].png')
+
 def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
     # Make new directory to store result of analysis
     contour_dir = pjoin(imdir, 'contours')
@@ -34,10 +38,11 @@ def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
         os.mkdir(contour_dir)
 
     # Find files to analyze
-    imfns = filter(os.listdir(imdir), '*[0-9][0-9][0-9].png')
-    if len(imfns) == 0:
-        # found nothingin directory, return something that doesn't break it
-        return(([np.nan], [np.nan], [np.nan], [np.nan], [np.nan]))
+    imfns = kerrims(imdir)
+    if len(imfns) <= skipfiles:
+        # found nothing in directory, return something that doesn't break it
+        anan = np.array([np.nan])
+        return(anan, anan, anan, anan, anan)
     # imfns= [fn for fn in os.listdir(imdir) if fn.endswith('.png')]
     impaths = [pjoin(imdir, fn) for fn in imfns]
     ims = [imread(fp) for fp in impaths]
@@ -238,14 +243,14 @@ def write_data((imnums, x1, x2, y1, y2), datadir):
         np.savetxt(f, zip(imnums, x1, x2, y1, y2), delimiter='\t', fmt=fmt)
 
 
-def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=1, skip=0, **kwargs):
+def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=None, skip=0, skipdone=False, **kwargs):
     '''
     Analyze all subdirs (subdir level input), writing plots and extracted data
     to that subdir.  Also write summary to parent dir
     '''
     data = []
     analysis_dir = pjoin(dir, 'Analysis')
-    if not os.path.isdir(analysis_dir):
+    if not isdir(analysis_dir):
         os.makedirs(analysis_dir)
     with open(pjoin(analysis_dir, 'contour_edges.txt'), 'w') as summary_file:
         summary_file.write('image_num\tleft\tright\ttop\tbottom\n')
@@ -259,16 +264,34 @@ def analyze_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=1, skip=0,
                 if isdir(md):
                     second.append(md)
 
-        if level == 1:
+        if level is None:
+            # Find all image dirs recursively
+            folders = []
+            for path, fold, fil in os.walk(dir):
+                if len(kerrims(path)) > 0:
+                    folders.append(path)
+        elif level == 0:
+            folders = [dir]
+        elif level == 1:
             folders = first
         elif level == 2:
             folders = second
         else:
-            folders = [dir]
+            return
 
-        # Remove analysis dir
-        ignoredirs = ['Analysis']
+        # Remove analysis dirs
+        ignoredirs = ['Analysis', 'contours']
         folders = [f for f in folders if psplit(f)[-1] not in ignoredirs]
+        # Don't look anywhere inside analysis dir either
+        remfolders = filter(folders, '*\Analysis\*')
+        folders = [f for f in folders if f not in remfolders]
+
+        if skipdone:
+            # Skip folders that already have ROI.txt
+            folders = [f for f in folders if not os.path.isfile(pjoin(f, 'contours', 'ROI.txt'))]
+
+        # Don't look in folders that don't have kerr images
+        folders = [f for f in folders if len(kerrims(f)) > 0]
 
         for folder in folders:
             dout = track_domain(folder, **kwargs)
