@@ -7,7 +7,6 @@ Could add tracking for multiple domains, and average them
 Parse log files for meta data
 import data from txt without running analysis again
 collect more graphs in Analysis directory
-prevent overwriting when collecting images into Analysis directory
 '''
 
 from select_rect import SelectRect
@@ -350,13 +349,17 @@ def track_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=None, skip=0
             contourdir = pjoin(analysis_dir, 'Contours')
             if not isdir(contourdir):
                 os.makedirs(contourdir)
-            copyfile(allcontours, pjoin(contourdir, psplit(folder)[-1]+'_contours.png'))
+            # Construct filename so that there are no conflicts
+            fn_prefix = '_'.join(folder.replace(dir, '').split(os.path.sep)[1:])
+            contour_fn = fn_prefix + '_contours.png'
+            copyfile(allcontours, pjoin(contourdir, contour_fn))
             # Copy slope graphs
             allcontours = pjoin(folder, 'left_right.png')
             lrslopedir = pjoin(analysis_dir, 'LR_Slopes')
             if not isdir(lrslopedir):
                 os.makedirs(lrslopedir)
-            copyfile(allcontours, pjoin(lrslopedir, psplit(folder)[-1]+'_LRslope.png'))
+            slope_fn = fn_prefix + '_LRslope.png'
+            copyfile(allcontours, pjoin(lrslopedir, slope_fn))
             plt.close()
 
     return {f:d for f,d in zip(folders, data)}
