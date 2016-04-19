@@ -22,6 +22,7 @@ from os.path import join as pjoin
 from os.path import split as psplit
 from os.path import isdir
 from shutil import copyfile
+from heapq import nlargest
 
 
 def kerrims(imdir):
@@ -100,6 +101,7 @@ def set_ROI(dir, skipdone=True):
 
         with open(pjoin(contour_dir, 'ROI.txt'), 'w') as f:
             f.write('{}:{}, {}:{}'.format(i0, i1, j0, j1))
+
 
 def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
     ''' Try to find contour of domains in imdir.  Write images '''
@@ -187,7 +189,28 @@ def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
         contours = find_contours(filt_subim, level)
 
         # pick the longest contour.  not always right.
-        bubble = max(contours, key=len)
+        largest_contours = nlargest(2, contours, key=len)
+        bubble = largest_contours[0]
+
+        # If contour ends on two different edges of picture, also append second
+        # longest
+        def edge((i, j)):
+            # return what edge the point is on
+            if i < 2:
+                return 1
+            elif i > di - 2:
+                return 2
+            elif j < 2:
+                return 3
+            elif j > dj - 2:
+                return 4
+            else:
+                return 0
+        i_edge = edge(bubble[0])
+        f_edge = edge(bubble[-1])
+        if (i_edge and f_edge) and (i_edge != f_edge) and len(largest_contours) > 1:
+            bubble = np.vstack((bubble, largest_contours[1]))
+
         bubbles.append(bubble)
         bubblex = bubble[:, 1]
         bubbley = bubble[:, 0]
@@ -234,7 +257,6 @@ def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
 
     plt.ion()
     return (imnums, x1, x2, y1, y2)
-
 
 def stretch(image):
     p2, p98 = np.percentile(image, (2, 98))
@@ -368,8 +390,6 @@ def track_all(dir=r'\\132.239.170.55\SharableDMIsamples\H31', level=None, skip=0
 def import_data(fp):
     ''' Get results of analysis from file '''
     assert os.path.isfile(fp)
-
-
 
 
 def make_fig(shape):

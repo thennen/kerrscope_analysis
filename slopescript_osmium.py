@@ -3,8 +3,8 @@ import numpy as np
 import os
 from matplotlib import pyplot as plt
 
-path = r'\\132.239.170.55\SharableDMIsamples\Expansion CoPtOs1APt'
-data = analyze_all(path, level=1, sigma=2.5, skipfiles=1, repeat_ROI=True)
+path = r'\\132.239.170.55\SharableDMIsamples\TaCoFeB(V)MgO'
+data = track_all(path, level=None, sigma=2.5, skipfiles=1, repeat_ROI=True)
 
 folders = np.array([os.path.split(fp)[-1] for fp in data.keys()])
 
