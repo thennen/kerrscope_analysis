@@ -6,6 +6,11 @@ from matplotlib import pyplot as plt
 path = r'\\132.239.170.55\SharableDMIsamples\TaCoFeB(V)MgO'
 data = track_all(path, level=None, sigma=2.5, skipfiles=1, repeat_ROI=True)
 
+pulse_dur = 8.5e-5
+# scale in cm/pixel
+# 20x, scale bar 100 micron =
+scale = 100e-4/150
+
 folders = np.array(data.keys())
 
 # Get average field for analyzed folders
@@ -33,8 +38,8 @@ for dtable in data.values():
     leftslopes.append(leftslope)
     rightslopes.append(rightslope)
 
-leftslopes = np.array(leftslopes)
-rightslopes = np.array(rightslopes)
+leftslopes = scale * np.array(leftslopes) / pulse_dur
+rightslopes = scale * np.array(rightslopes) / pulse_dur
 
 # Extract field direction and field value from Rob's folder names
 direction = []
@@ -78,13 +83,13 @@ for p in np.unique(parentnames):
     plt.figure(figsize=(12,8))
     #plt.scatter(meanfields, leftslopes, label='leftslope')
     #plt.scatter(meanfields, rightslopes, label='rightslope')
-    orderplot(meanfields[pbmask], rightslopes[pbmask], '.-', label='rightslope B')
-    orderplot(meanfields[pamask], rightslopes[pamask], '.-', label='rightslope A')
-    orderplot(meanfields[pbmask], leftslopes[pbmask], '.-', label='leftslope B')
-    orderplot(meanfields[pamask], leftslopes[pamask], '.-', label='leftslope A')
+    orderplot(meanfields[pbmask], rightslopes[pbmask], '.-', label='Right Wall B')
+    orderplot(meanfields[pamask], rightslopes[pamask], '.-', label='Right Wall A')
+    orderplot(meanfields[pbmask], leftslopes[pbmask], '.-', label='Left Wall B')
+    orderplot(meanfields[pamask], leftslopes[pamask], '.-', label='Left Wall A')
 
     plt.legend(loc=0)
-    plt.ylabel('Slope (Pixels/pulse)')
+    plt.ylabel('Slope (cm/s)')
     plt.xlabel('IP Field (mT)')
     plt.title(p)
 

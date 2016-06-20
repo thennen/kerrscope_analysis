@@ -103,7 +103,7 @@ def set_ROI(dir, skipdone=True):
             f.write('{}:{}, {}:{}'.format(i0, i1, j0, j1))
 
 
-def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
+def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1, watermark=True):
     ''' Try to find contour of domains in imdir.  Write images '''
     assert isdir(imdir)
     # Make new directory to store result of analysis
@@ -245,18 +245,20 @@ def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1):
     ax.imshow(subims[-1], cmap='gray', interpolation='none')
     fontdict = {'size':8}
     # Add watermark.  Pick whether it's white or black
-    mpvalue = np.mean(subims[-1][-15:, -50:])
-    if mpvalue > .5:
-        fontdict['color'] = 'black'
-    else:
-        fontdict['color'] = 'white'
-    ax.text(dj - 55, di - 3, 'T Hennen', fontdict=fontdict)
+    if watermark:
+        mpvalue = np.mean(subims[-1][-15:, -50:])
+        if mpvalue > .5:
+            fontdict['color'] = 'black'
+        else:
+            fontdict['color'] = 'white'
+        ax.text(dj - 55, di - 3, 'T Hennen', fontdict=fontdict)
     fig.savefig(pjoin(contour_dir, 'all_contours2.png'), pad_inches='tight')
 
     #plt.close(fig)
 
     plt.ion()
     return (imnums, x1, x2, y1, y2)
+
 
 def stretch(image):
     p2, p98 = np.percentile(image, (2, 98))
