@@ -103,7 +103,7 @@ def set_ROI(dir, skipdone=True):
             f.write('{}:{}, {}:{}'.format(i0, i1, j0, j1))
 
 
-def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1, watermark=True):
+def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1, watermark=True, cmap=plt.cm.hsv):
     ''' Try to find contour of domains in imdir.  Write images '''
     assert isdir(imdir)
     # Make new directory to store result of analysis
@@ -235,7 +235,6 @@ def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1, watermark=True):
     # Plot all the contours
     fig, ax = make_fig((di, dj))
     ax.invert_yaxis()
-    cmap = plt.cm.hsv
     colors = [cmap(q) for q in np.linspace(0, 1, len(bubbles))]
     for bub, c in zip(bubbles, colors):
         ax.plot(bub[:, 1], bub[:, 0], linewidth=1.5, c=c)
