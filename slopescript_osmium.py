@@ -1,9 +1,13 @@
 # Experiment has in plane field with same pulse in both directions
+
+# This extracts domain wall speed for all the fields and makes some plots?
+# run track_domain.py first
+
 import numpy as np
 import os
 from matplotlib import pyplot as plt
 
-path = r'\\132.239.170.55\SharableDMIsamples\TaCoFeB(V)MgO'
+path = r'\\132.239.170.55\SharableDMIsamples\Expansion_CoPtOs1APt'
 data = track_all(path, level=None, sigma=2.5, skipfiles=1, repeat_ROI=True)
 
 folders = np.array([os.path.split(fp)[-1] for fp in data.keys()])
@@ -37,10 +41,11 @@ rightslopes = np.array(rightslopes)
 
 folders = np.array([os.path.split(fp)[-1] for fp in data.keys()])
 
+# Parse directory name for field and direction
 direction = []
 folderfield = []
 for f in folders:
-    parts = f.split(' ')
+    parts = f.split('_')
     if len(parts) == 3:
         ffield = float(parts[0].strip('mT').replace('neg', '-'))
         direc = parts[1]

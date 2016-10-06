@@ -15,7 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.image import imread
 from skimage.measure import find_contours
-from skimage.filters import gaussian_filter
+from skimage.filters import gaussian
 from skimage import exposure
 import fnmatch
 from os.path import join as pjoin
@@ -23,6 +23,7 @@ from os.path import split as psplit
 from os.path import isdir
 from shutil import copyfile
 from heapq import nlargest
+from itertools import chain
 
 
 def kerrims(imdir):
@@ -184,7 +185,7 @@ def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1, watermark=True, 
         # output??
         fig, ax = make_fig((di, dj))
         ax.invert_yaxis()
-        filt_subim = gaussian_filter(subim, (sigma, sigma))
+        filt_subim = gaussian(subim, (sigma, sigma))
         level = (np.max(filt_subim) + np.min(filt_subim)) / 2
         contours = find_contours(filt_subim, level)
 
@@ -259,8 +260,177 @@ def track_domain(imdir, repeat_ROI=False, skipfiles=0, sigma=1, watermark=True, 
     return (imnums, x1, x2, y1, y2)
 
 
-def stretch(image):
-    p2, p98 = np.percentile(image, (2, 98))
+def locate_multiple_domains(impath, repeat_ROI=False, sigma=1):
+    ''' Return contours for domains in a region of interest for one image '''
+    imdir, imfn = os.path.split(impath)
+    contour_dir = pjoin(imdir, 'Analysis')
+    if not isdir(contour_dir):
+        os.mkdir(contour_dir)
+
+    im = imread(impath)
+    im = stretch(im[:512][:,:,0])
+
+    if repeat_ROI:
+        print('Repeat ROI from {}'.format(imdir))
+        roi = pjoin(contour_dir, 'ROI.txt')
+        if os.path.isfile(roi):
+            with open(roi, 'r') as f:
+                roi_str = f.readline()
+                [(i0, i1), (j0, j1)] = [s.split(':') for s in roi_str.split(',')]
+                i0, i1, j0, j1 = int(i0), int(i1), int(j0), int(j1)
+        else:
+            print('/Analysis/ROI.txt not found')
+            repeat_ROI = False
+    else:
+        # Plot the image for area selection
+        print('Plotting from {}'.format(imdir))
+        fig, ax = make_fig(np.shape(im))
+        ax.imshow(im, cmap='gray', interpolation='none')
+        a = SelectRect(ax)
+        plt.show()
+        while a.x is None:
+            plt.pause(.1)
+        fig.savefig(pjoin(contour_dir, 'ROI_' + imfn), pad_inches='tight')
+        plt.close(fig)
+
+        # Change to matrix notation
+        i0, i1 = a.y[0], a.y[1]
+        j0, j1 = a.x[0], a.x[1]
+
+    di = i1 - i0
+    dj = j1 - j0
+    subim = im[i0:i1, j0:j1]
+
+    # For some reason you must plot contours before imshow for correct png
+    # output??
+    fig, ax = make_fig((di, dj))
+    ax.invert_yaxis()
+    filt_subim = gaussian(subim, (sigma, sigma))
+    # Use the middle of the scaled pixel range for threshold level
+    level = (np.max(filt_subim) + np.min(filt_subim)) / 2
+    # Find all the contours
+    contours = find_contours(filt_subim, level)
+    print('Found {} contours'.format(len(contours)))
+
+    # Write plot of contours
+    ccycle = np.array(['red', 'lime', 'blue', 'yellow', 'orange', 'black'])
+    colors = ccycle[arange(len(contours)) % len(ccycle)]
+    for c, color in zip(contours, colors):
+        ax.plot(c[:, 1], c[:, 0], linewidth=1.5, c=color)
+
+    ax.imshow(subim, cmap='gray', interpolation='none')
+    outfp = pjoin(contour_dir, imfn)
+    fig.savefig(outfp, pad_inches='tight')
+    print('Wrote ' + outfp)
+    #plt.close(fig)
+
+    return contours
+
+
+def track_multiple_domains(imdir, repeat_ROI=False, skipfiles=0, sigma=1, cmap=plt.cm.hsv):
+    ''' Try to track multiple domains'''
+    assert isdir(imdir)
+    # Make new directory to store result of analysis
+    contour_dir = pjoin(imdir, 'Analysis')
+    if not isdir(contour_dir):
+        os.mkdir(contour_dir)
+
+    # Find files to analyze
+    imfns = kerrims(imdir)
+    if len(imfns) <= skipfiles:
+        # found nothing in directory
+        return
+    # imfns= [fn for fn in os.listdir(imdir) if fn.endswith('.png')]
+    impaths = [pjoin(imdir, fn) for fn in imfns]
+    ims = [imread(fp) for fp in impaths]
+    imnums = [p.split('_')[-1][:-4] for p in impaths]
+
+    # Do contrast stretching for all ims
+    ims = [stretch(im[:512]) for im in ims]
+    # get rid of 3rd channel or whatever (if there is one)
+    ims = [im[:,:,0] for im in ims]
+
+    # Whoever wrote kerr program is a goddamn idiot
+    # Actually he's a pretty alright guy.
+    def fix_shit(astring):
+        try:
+            return int(astring)
+        except:
+            return 0
+    imnums = map(fix_shit, imnums)
+
+    if repeat_ROI:
+        print('Repeat ROI from {}'.format(imdir))
+        roi = pjoin(contour_dir, 'ROI.txt')
+        if os.path.isfile(roi):
+            with open(roi, 'r') as f:
+                roi_str = f.readline()
+                [(i0, i1), (j0, j1)] = [s.split(':') for s in roi_str.split(',')]
+                i0, i1, j0, j1 = int(i0), int(i1), int(j0), int(j1)
+        else:
+            print('ROI.txt not found')
+            repeat_ROI = False
+
+    if not repeat_ROI:
+        # Plot 10 of the images on top of each other for area selection
+        print('Plotting from {}'.format(imdir))
+        fig, ax = make_fig(np.shape(ims[0]))
+        step = max(1, len(ims) / 10)
+        for im in ims[::step]:
+            ax.imshow(im, alpha=.1, cmap='gray', interpolation='none')
+        ax.imshow(ims[-1], alpha=.1, cmap='gray', interpolation='none')
+        a = SelectRect(ax)
+        plt.show()
+        while a.x is None:
+            plt.pause(.1)
+        fig.savefig(pjoin(contour_dir, 'overlap.png'), pad_inches='tight')
+
+        # Change to matrix notation
+        i0, i1 = a.y[0], a.y[1]
+        j0, j1 = a.x[0], a.x[1]
+
+    di = i1 - i0
+    dj = j1 - j0
+    subims = [im[i0:i1, j0:j1] for im in ims]
+
+    subims = subims[skipfiles:]
+    imfns = imfns[skipfiles:]
+    imnums = imnums[skipfiles:]
+    for subim, fn in zip(subims, imfns):
+        # For some reason you must plot contours before imshow for correct png
+        # output??
+        fig, ax = make_fig((di, dj))
+        ax.invert_yaxis()
+        filt_subim = gaussian(subim, (sigma, sigma))
+        # Use the middle of the scaled pixel range for threshold level
+        level = (np.max(filt_subim) + np.min(filt_subim)) / 2
+        # Find all the contours
+        contours = find_contours(filt_subim, level)
+
+        print(len(contours))
+
+        # Write plot of contours
+        #ccycle = np.array(['red', 'lime', 'blue', 'yellow', 'orange', 'black'])
+        ccycle = np.array(['lime'])
+        colors = ccycle[arange(len(contours)) % len(ccycle)]
+        for c, color in zip(contours, colors):
+            ax.plot(c[:, 1], c[:, 0], linewidth=1.5, c=color)
+
+        ax.imshow(subim, cmap='gray', interpolation='none')
+        fig.savefig(pjoin(contour_dir, fn), pad_inches='tight')
+        plt.close(fig)
+
+    with open(pjoin(contour_dir, 'ROI.txt'), 'w') as f:
+        f.write('{}:{}, {}:{}'.format(i0, i1, j0, j1))
+
+    #plt.close(fig)
+
+    return contours
+
+
+
+def stretch(image, lp=2, hp=98):
+    p2, p98 = np.percentile(image, (lp, hp))
     return exposure.rescale_intensity(image, in_range=(p2, p98))
 
 
@@ -411,3 +581,33 @@ if __name__ == '__main__':
     #imdir = r"Tolley DMI PtCoIrPt\Ir 2A\1"
     #imdir= r'C:\Users\thenn\Desktop\bubbles\Tolley DMI PtCoIrPt\Ir 4A\15'
     #track_domain(imdir)
+
+
+def find_circles(contours, sigma=1., smallest_r=5, largest_r=10):
+    # Try to identify circular contours and return [[circles], [notcircles]]
+    # Hugely inefficient
+
+    def dist(p1, p2):
+        x1, y1 = p1
+        x2, y2 = p2
+        return sqrt((x1-x2)**2 + (y1 - y2)**2)
+    def std_and_mean(pt, contour):
+        # find stdev of distances from pt to contour
+        dists = [dist(pt, c) for c in contour]
+        return np.std(dists), np.mean(dists)
+
+    centers = [(mean(c[:,0]), mean(c[:,1])) for c in contours]
+    std_dist, mean_dist = zip(*[std_and_mean(cent, cont) for cent, cont in zip(centers, contours)])
+    std_dist = array(std_dist)
+    mean_dist = array(mean_dist)
+    contours = array(contours)
+
+    # define circle by limit on std dist from center and range for mean dist
+    # from center
+    circ_cond = (std_dist <= sigma) & (smallest_r < mean_dist) & (mean_dist < largest_r)
+
+    circles = contours[circ_cond]
+    notcircles = contours[~circ_cond]
+    print('Found {} Circles, and {} Not Circles'.format(len(circles), len(notcircles)))
+
+    return circles, notcircles
